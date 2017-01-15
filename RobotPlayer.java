@@ -10,10 +10,13 @@ public strictfp class RobotPlayer {
     static final int GARDENER_SUM_CHANNEL = 3; //the sum of gardeners incremented by gardeners on their turn
     static final int SCOUT_COUNT_CHANNEL = 4;
     static final int SCOUT_SUM_CHANNEL = 5;
+    static final int SOLDIER_COUNT_CHANNEL = 6;
+    static final int SOLDIER_SUM_CHANNEL = 7;
 
     static final int MAX_GARDENERS = 5; //max number of gardeners we want to build
     static final int MAX_TREES = 8; //max number of trees
     static final int MAX_SCOUTS = 3;
+    static final int MAX_SOLDIERS = 6;
 
     /**
      * run() is the method that is called when a robot is instantiated in the Battlecode world.
@@ -64,6 +67,8 @@ public strictfp class RobotPlayer {
                     rc.broadcast(GARDENER_SUM_CHANNEL, 0); //resets the sum channel
                     rc.broadcast(SCOUT_COUNT_CHANNEL, rc.readBroadcast(SCOUT_SUM_CHANNEL));
                     rc.broadcast(SCOUT_SUM_CHANNEL, 0);
+                    rc.broadcast(SOLDIER_COUNT_CHANNEL, rc.readBroadcast(SOLDIER_SUM_CHANNEL));
+                    rc.broadcast(SOLDIER_SUM_CHANNEL, 0);
                     if(rc.getTeamBullets() > 500)
                     {
                         rc.donate(10);
@@ -103,6 +108,8 @@ public strictfp class RobotPlayer {
                     rc.plantTree(dir);
                 } else if(rc.getTeamBullets() > 80 && rc.canBuildRobot(RobotType.SCOUT, dir) && rc.readBroadcast(SCOUT_COUNT_CHANNEL) < MAX_SCOUTS){
                     rc.buildRobot(RobotType.SCOUT, dir);
+                } else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.SOLDIER, dir) && rc.readBroadcast(SOLDIER_COUNT_CHANNEL) < MAX_SOLDIERS){
+                    rc.buildRobot(RobotType.SOLDIER, dir);
                 }
                 else { //contained in an else because we don't want gardeners wandering away from their trees
                     move(dir);
@@ -118,6 +125,13 @@ public strictfp class RobotPlayer {
     static void runSoldier() throws GameActionException {
         while (true) {
             try {
+                rc.broadcast(SOLDIER_SUM_CHANNEL, rc.readBroadcast(SOLDIER_SUM_CHANNEL) + 1); //counter for soldiers
+                Direction dir = randomDirection();
+                RobotInfo[] enemyBots = rc.senseNearbyRobots(RobotType.SOLDIER.bodyRadius + RobotType.SOLDIER.sensorRadius, rc.getTeam().opponent()); //sense all enemy bots nearby and put it into an array
+                if(enemyBots.length != 0){ //if there are nearby enemies, fire at them
+                    fireBullet(enemyBots[0].getLocation());
+                }
+                move(dir);
                 Clock.yield();
             } catch (Exception e) {
                 e.printStackTrace();
@@ -213,5 +227,20 @@ public strictfp class RobotPlayer {
             return nearbyTrees[0];
         }
         return null;
+    }
+    //methods to fire bullets based on a given maplocation or direction
+    public static void fireBullet (MapLocation loc) throws GameActionException {
+        if(rc.canFireSingleShot()){
+            Direction dir = rc.getLocation().directionTo(loc);
+            rc.fireSingleShot(dir);
+        }
+
+
+    }
+
+    public static void fireBullet(Direction dir) throws GameActionException{
+        if(rc.canFireSingleShot()){
+            rc.fireSingleShot(dir);
+        }
     }
 }
