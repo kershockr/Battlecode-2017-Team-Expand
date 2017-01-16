@@ -73,14 +73,14 @@ public strictfp class RobotPlayer {
                     rc.broadcast(SOLDIER_SUM_CHANNEL, 0);
                     if(rc.getTeamBullets() > 500)
                     {
-                        rc.donate(10);
+                        rc.donate(10); //getting victory points
                     }
                 }
 
                 Direction dir = randomDirection();
                 if (rc.canHireGardener(dir) && rc.readBroadcast(GARDENER_COUNT_CHANNEL) < MAX_GARDENERS) { //will hire a gardener if it is possible and there are less than the desired maximum
                     rc.hireGardener(dir);
-                    rc.broadcast(MAX_TREES_CHANNEL, rc.readBroadcast(MAX_TREES_CHANNEL) + 2);
+                    rc.broadcast(MAX_TREES_CHANNEL, rc.readBroadcast(MAX_TREES_CHANNEL) + 2); //increase our max amount of trees by 2 for each gardener
                 }
 
                 move(dir);
@@ -140,7 +140,15 @@ public strictfp class RobotPlayer {
                 if(rc.readBroadcast(ATTACK_LOCATION_X_CHANNEL) != 0) {
                     System.out.println("Moving to target location"); //for debugging
                     MapLocation attackLocation = new MapLocation((float) rc.readBroadcast(ATTACK_LOCATION_X_CHANNEL), (float) rc.readBroadcast(ATTACK_LOCATION_Y_CHANNEL)); //creates a maplocation of the attack target
-                    moveTo(attackLocation); //try to move to that location
+                    if(rc.getLocation().distanceTo(attackLocation) < 1){
+                        if(!canSenseEnemyGarden(rc.getType().bodyRadius + rc.getType().sensorRadius)){
+                            rc.broadcast(ATTACK_LOCATION_X_CHANNEL, 0);
+                            rc.broadcast(ATTACK_LOCATION_Y_CHANNEL, 0);
+                        }
+                    }
+                    else {
+                        moveTo(attackLocation); //try to move to that location
+                    }
                 }
                 move(dir);
                 Clock.yield();
