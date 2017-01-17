@@ -18,6 +18,7 @@ public strictfp class RobotPlayer
     static final int ATTACK_LOCATION_X_CHANNEL = 8; // holds the x location (rounded to the nearest int) of a high priority target (like enemy tree garden)
     static final int ATTACK_LOCATION_Y_CHANNEL = 9;
     static final int MAX_TREES_CHANNEL = 10; // holds max trees, so the amount of trees scales to the number of gardeners
+    static final int ARCHON_SLAVE_CHANNEL = 11;
 
     static final int MAX_GARDENERS = 5; //max number of gardeners we want to build
     static final int MAX_SCOUTS = 4;
@@ -159,7 +160,27 @@ public strictfp class RobotPlayer
             try
             {
                 rc.broadcast(SOLDIER_SUM_CHANNEL, rc.readBroadcast(SOLDIER_SUM_CHANNEL) + 1); //counter for soldiers
-                Direction dir = randomDirection();
+                Direction dir = randomDirection(); //direction we will eventually move, starts out random
+
+                //dodge incoming bullets first
+                BulletInfo[] nearbyBullets = rc.senseNearbyBullets(3); //sense nearby bullets in a radius of 3 units around
+                if(nearbyBullets.length != 0)
+                {
+                    if(bulletWillCollide(nearbyBullets[0])) //if we're in the path of a bullet
+                    {//dodge
+                        BulletInfo incomingBullet = nearbyBullets[0];
+                        if(canDodge(incomingBullet.getDir())) //if we can dodge left or right
+                        {
+                            dir = dodgeDirection(rc.getLocation().directionTo(incomingBullet.getLocation()));
+                        }
+                        else //if we can't dodge left or right, set movement direction away from bullet
+                        {
+                            dir = rc.getLocation().directionTo(incomingBullet.getLocation()).rotateLeftDegrees(180); //move away from the bullet
+                        }
+                    }
+
+                }
+
                 RobotInfo[] enemyBots = rc.senseNearbyRobots(RobotType.SOLDIER.bodyRadius + RobotType.SOLDIER.sensorRadius, rc.getTeam().opponent()); //sense all enemy bots nearby and put it into an array
                 if (enemyBots.length != 0)
                 { //if there are nearby enemies, fire at them
@@ -365,5 +386,65 @@ public strictfp class RobotPlayer
             return enemyTrees[0].getLocation();
         }
         return null;
+    }
+
+    public static boolean tryMove(Direction dir) throws GameActionException
+    {
+        return tryMove(dir, 20, 3);
+    }
+
+
+    public static boolean tryMove(Direction dir, int degreeOffset, int checksPerSide) throws GameActionException
+    {
+        // First, try intended direction
+        if (!rc.hasMoved() && rc.canMove(dir)) {
+            rc.move(dir);
+            return true;
+        }
+
+        // Now try a bunch of similar angles
+        //boolean moved = rc.hasMoved();
+        int currentCheck = 1;
+
+        while(currentCheck<=checksPerSide) {
+            // Try the offset of the left side
+            if(!rc.hasMoved() && rc.canMove(dir.rotateLeftDegrees(degreeOffset*currentCheck))) {
+                rc.move(dir.rotateLeftDegrees(degreeOffset*currentCheck));
+                return true;
+            }
+            // Try the offset on the right side
+            if(! rc.hasMoved() && rc.canMove(dir.rotateRightDegrees(degreeOffset*currentCheck))) {
+                rc.move(dir.rotateRightDegrees(degreeOffset*currentCheck));
+                return true;
+            }
+            // No move performed, try slightly further
+            currentCheck++;
+        }
+
+        // A move never happened, so return false.
+        return false;
+    }
+
+    public static boolean bulletWillCollide(BulletInfo bullet)
+    {
+        Direction bulletDirection = bullet.getDir();
+        Direction directionToBullet = rc.getLocation().directionTo(bullet.getLocation());
+        Direction inverseDirectionToBullet = directionToBullet.rotateRightDegrees(180);
+        return (inverseDirectionToBullet.degreesBetween(bulletDirection) < 15);
+    }
+
+    public static boolean canDodge(Direction bulletDir)
+    {
+        return rc.canMove(bulletDir.rotateLeftDegrees(90)) || rc.canMove(bulletDir.rotateRightDegrees(90));
+    }
+
+    public static Direction dodgeDirection(Direction directionToBullet)
+    {//returns the direction we will dodge in
+        if(rc.canMove(directionToBullet.rotateLeftDegrees(90)))
+        {
+            return directionToBullet.rotateLeftDegrees(90);
+        }
+        else //don't need to check cause this method will only be called if we can move either left or right
+            return directionToBullet.rotateRightDegrees(90);
     }
 }
