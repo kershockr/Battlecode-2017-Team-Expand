@@ -18,11 +18,11 @@ public strictfp class RobotPlayer
     static final int ATTACK_LOCATION_X_CHANNEL = 8; // holds the x location (rounded to the nearest int) of a high priority target (like enemy tree garden)
     static final int ATTACK_LOCATION_Y_CHANNEL = 9;
     static final int MAX_TREES_CHANNEL = 10; // holds max trees, so the amount of trees scales to the number of gardeners
-    static final int ARCHON_SLAVE_CHANNEL = 11;
+    static final int MAX_SOLDIER_CHANNEL = 11;
 
     static final int MAX_GARDENERS = 5; //max number of gardeners we want to build
-    static final int MAX_SCOUTS = 2;
-    static final int MAX_SOLDIERS = 8;
+    static final int MAX_SCOUTS = 3;
+    static final int MAX_SOLDIERS = 9;
     static Direction buildDirection = Direction.getSouth();
 
     /**
@@ -73,6 +73,7 @@ public strictfp class RobotPlayer
                 if (rc.getRoundNum() == 1 && rc.readBroadcast(HEAD_ARCHON_CHANNEL) == 0)
                 { // excecuted only on first round, sends the senior archon's ID to the head archon channel
                     rc.broadcast(HEAD_ARCHON_CHANNEL, rc.getID());
+                    rc.broadcast(MAX_SOLDIER_CHANNEL, 8);
                 }
                 //this method of counting makes bots easy to track by enemies
                 if (rc.getID() == rc.readBroadcast(HEAD_ARCHON_CHANNEL))
@@ -88,11 +89,14 @@ public strictfp class RobotPlayer
                         rc.donate(10); //getting victory points
                     }
                 }
-
+                if((rc.getRoundNum() % 50 == 0) && (rc.readBroadcast(SOLDIER_COUNT_CHANNEL) >= rc.readBroadcast(MAX_TREES_CHANNEL)))
+                {
+                    rc.broadcast(MAX_SOLDIER_CHANNEL, rc.readBroadcast(MAX_SOLDIER_CHANNEL) + 2);
+                }
                 Direction dir = randomDirection();
-                if (rc.canHireGardener(Direction.getNorth()) && rc.readBroadcast(GARDENER_COUNT_CHANNEL) < MAX_GARDENERS)
+                if (rc.canHireGardener(dir) && rc.readBroadcast(GARDENER_COUNT_CHANNEL) < MAX_GARDENERS)
                 { //will hire a gardener if it is possible and there are less than the desired maximum
-                    rc.hireGardener(Direction.getNorth());
+                    rc.hireGardener(dir);
                     rc.broadcast(MAX_TREES_CHANNEL, rc.readBroadcast(MAX_TREES_CHANNEL) + 3); //increase our max amount of trees by 2 for each gardener
                 }
 
@@ -117,16 +121,18 @@ public strictfp class RobotPlayer
                 Direction dir = randomDirection();
 
                 //building an early scout
-                /*
+
                 if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.SCOUT, dir))
                 { //to build an early scout, early tree shaking is very valuable
                     rc.buildRobot(RobotType.SCOUT, dir);
                 }
-                */
+
                 TreeInfo[] nearby = rc.senseNearbyTrees((float)2.5, rc.getTeam());
+
                 //can build in any of the three directions
-                if((((rc.canPlantTree(Direction.getSouth()) && (rc.canPlantTree(Direction.getNorth()) && rc.canPlantTree(Direction.getEast()) && rc.canPlantTree(Direction.getWest())) && rc.getTeamBullets() >= 50)) || isNesting(nearby)))
+                if(isNestable() || isNesting(nearby))
                 {
+
                     nest();
                 }
                 else if(isInNest(nearby))
@@ -148,7 +154,7 @@ public strictfp class RobotPlayer
                     else if (rc.getTeamBullets() > 80 && rc.canBuildRobot(RobotType.SCOUT, buildDirection) && rc.readBroadcast(SCOUT_COUNT_CHANNEL) < MAX_SCOUTS)
                     {
                         rc.buildRobot(RobotType.SCOUT, buildDirection);
-                    } else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.SOLDIER, buildDirection) && rc.readBroadcast(SOLDIER_COUNT_CHANNEL) < MAX_SOLDIERS)
+                    } else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.SOLDIER, buildDirection) && rc.readBroadcast(SOLDIER_COUNT_CHANNEL) < rc.readBroadcast(MAX_SOLDIER_CHANNEL))
                     {
                         rc.buildRobot(RobotType.SOLDIER, buildDirection);
                     }
@@ -158,14 +164,6 @@ public strictfp class RobotPlayer
                 {
                     move(dir);
                 }
-
-
-
-
-
-
-
-
                 Clock.yield();
             } catch (Exception e)
             {
@@ -207,6 +205,10 @@ public strictfp class RobotPlayer
                 RobotInfo[] enemyBots = rc.senseNearbyRobots(RobotType.SOLDIER.bodyRadius + RobotType.SOLDIER.sensorRadius, rc.getTeam().opponent()); //sense all enemy bots nearby and put it into an array
                 if (enemyBots.length != 0)
                 { //if there are nearby enemies, fire at them
+                    if(enemyBots[0].getLocation().isWithinDistance(rc.getLocation(), 4))
+                    {
+                        fireTriadBullet(enemyBots[0].getLocation());
+                    }
                     fireBullet(enemyBots[0].getLocation());
                 }
                 if (rc.readBroadcast(ATTACK_LOCATION_X_CHANNEL) != 0)
@@ -222,7 +224,9 @@ public strictfp class RobotPlayer
                         }
                     } else
                     {
-                        moved = tryMove(rc.getLocation().directionTo(attackLocation)); //try to move to that location
+                        Direction directionToTarget = rc.getLocation().directionTo(attackLocation);
+                        moved = tryMove(directionToTarget); //try to move to that location
+
                     }
                 }
                 if(!moved)
@@ -375,15 +379,28 @@ public strictfp class RobotPlayer
     }
 
     //methods to fire bullets based on a given maplocation or direction
-    public static void fireBullet(MapLocation loc) throws GameActionException
+    //best to use it in methods, because changing directions will make you walk into your bullet
+    public static Direction fireBullet(MapLocation loc) throws GameActionException
     {
         if (rc.canFireSingleShot())
         {
             Direction dir = rc.getLocation().directionTo(loc);
             rc.fireSingleShot(dir);
+            return dir;
         }
+        return null;
 
+    }
 
+    public static Direction fireTriadBullet(MapLocation loc) throws GameActionException
+    {
+        if(rc.canFireTriadShot())
+        {
+            Direction dir = rc.getLocation().directionTo(loc);
+            rc.fireTriadShot(dir);
+            return dir;
+        }
+        return null;
     }
 
     public static void fireBullet(Direction dir) throws GameActionException
@@ -523,6 +540,11 @@ public strictfp class RobotPlayer
             }
         }
         return true;
+    }
+
+    public static boolean isNestable()
+    {
+        return (((rc.canPlantTree(Direction.getSouth()) && (rc.canPlantTree(Direction.getNorth()) && rc.canPlantTree(Direction.getEast()) && rc.canPlantTree(Direction.getWest())) && rc.getTeamBullets() >= 50)));
     }
 
 
