@@ -94,8 +94,10 @@ public strictfp class RobotPlayer
                     rc.hireGardener(dir);
                     rc.broadcast(MAX_TREES_CHANNEL, rc.readBroadcast(MAX_TREES_CHANNEL) + 2); //increase our max amount of trees by 2 for each gardener
                 }
-
-                move(dir);
+                if(rc.getRoundNum() % 10 == 0)
+                {
+                    move(dir);
+                }
                 Clock.yield();
             } catch (Exception e)
             {
@@ -129,13 +131,21 @@ public strictfp class RobotPlayer
                 {
                     move(dir);
                 }
+
+                //building an early scout
                 if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.SCOUT, dir))
                 { //to build an early scout, early tree shaking is very valuable
                     rc.buildRobot(RobotType.SCOUT, dir);
                 }
+
+                //building a garden
                 if (rc.getTreeCount() < rc.readBroadcast(MAX_TREES_CHANNEL) && rc.canPlantTree(dir))
                 { //if there aren't enough trees and a tree can be planted in the random direciton dir
-                    rc.plantTree(dir);
+                    MapLocation[] archonStarts = rc.getInitialArchonLocations(rc.getTeam()); //get initial position of archons
+                    if(rc.getLocation().distanceTo(archonStarts[0]) >= 5) //if we're 3 units away from the initial position of the first archon, plant
+                    {
+                        rc.plantTree(dir);
+                    }
                 } else if (rc.getTeamBullets() > 80 && rc.canBuildRobot(RobotType.SCOUT, dir) && rc.readBroadcast(SCOUT_COUNT_CHANNEL) < MAX_SCOUTS)
                 {
                     rc.buildRobot(RobotType.SCOUT, dir);
@@ -161,6 +171,7 @@ public strictfp class RobotPlayer
             {
                 rc.broadcast(SOLDIER_SUM_CHANNEL, rc.readBroadcast(SOLDIER_SUM_CHANNEL) + 1); //counter for soldiers
                 Direction dir = randomDirection(); //direction we will eventually move, starts out random
+                boolean moved = false;
 
                 //dodge incoming bullets first
                 BulletInfo[] nearbyBullets = rc.senseNearbyBullets(3); //sense nearby bullets in a radius of 3 units around
@@ -199,10 +210,13 @@ public strictfp class RobotPlayer
                         }
                     } else
                     {
-                        moveTo(attackLocation); //try to move to that location
+                        moved = tryMove(rc.getLocation().directionTo(attackLocation)); //try to move to that location
                     }
                 }
-                move(dir);
+                if(!moved)
+                {
+                    move(dir);
+                }
                 Clock.yield();
             } catch (Exception e)
             {
