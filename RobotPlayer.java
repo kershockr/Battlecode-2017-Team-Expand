@@ -92,7 +92,7 @@ public strictfp class RobotPlayer
                 if (rc.canHireGardener(dir) && rc.readBroadcast(GARDENER_COUNT_CHANNEL) < MAX_GARDENERS)
                 { //will hire a gardener if it is possible and there are less than the desired maximum
                     rc.hireGardener(dir);
-                    rc.broadcast(MAX_TREES_CHANNEL, rc.readBroadcast(MAX_TREES_CHANNEL) + 2); //increase our max amount of trees by 2 for each gardener
+                    rc.broadcast(MAX_TREES_CHANNEL, rc.readBroadcast(MAX_TREES_CHANNEL) + 3); //increase our max amount of trees by 2 for each gardener
                 }
                 if(rc.getRoundNum() % 10 == 0)
                 {
@@ -142,7 +142,7 @@ public strictfp class RobotPlayer
                 if (rc.getTreeCount() < rc.readBroadcast(MAX_TREES_CHANNEL) && rc.canPlantTree(dir))
                 { //if there aren't enough trees and a tree can be planted in the random direciton dir
                     MapLocation[] archonStarts = rc.getInitialArchonLocations(rc.getTeam()); //get initial position of archons
-                    if(rc.getLocation().distanceTo(archonStarts[0]) >= 5) //if we're 3 units away from the initial position of the first archon, plant
+                    if (rc.getLocation().distanceTo(archonStarts[0]) >= 5) //if we're 3 units away from the initial position of the first archon, plant
                     {
                         rc.plantTree(dir);
                     }
@@ -461,4 +461,6 @@ public strictfp class RobotPlayer
         else //don't need to check cause this method will only be called if we can move either left or right
             return directionToBullet.rotateRightDegrees(90);
     }
+
+
 }
