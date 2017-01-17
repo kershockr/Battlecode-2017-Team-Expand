@@ -21,8 +21,9 @@ public strictfp class RobotPlayer
     static final int ARCHON_SLAVE_CHANNEL = 11;
 
     static final int MAX_GARDENERS = 5; //max number of gardeners we want to build
-    static final int MAX_SCOUTS = 4;
+    static final int MAX_SCOUTS = 2;
     static final int MAX_SOLDIERS = 8;
+    static Direction buildDirection = Direction.getSouth();
 
     /**
      * run() is the method that is called when a robot is instantiated in the Battlecode world.
@@ -89,15 +90,14 @@ public strictfp class RobotPlayer
                 }
 
                 Direction dir = randomDirection();
-                if (rc.canHireGardener(dir) && rc.readBroadcast(GARDENER_COUNT_CHANNEL) < MAX_GARDENERS)
+                if (rc.canHireGardener(Direction.getNorth()) && rc.readBroadcast(GARDENER_COUNT_CHANNEL) < MAX_GARDENERS)
                 { //will hire a gardener if it is possible and there are less than the desired maximum
-                    rc.hireGardener(dir);
+                    rc.hireGardener(Direction.getNorth());
                     rc.broadcast(MAX_TREES_CHANNEL, rc.readBroadcast(MAX_TREES_CHANNEL) + 3); //increase our max amount of trees by 2 for each gardener
                 }
-                if(rc.getRoundNum() % 10 == 0)
-                {
-                    move(dir);
-                }
+
+                move(dir);
+
                 Clock.yield();
             } catch (Exception e)
             {
@@ -116,43 +116,55 @@ public strictfp class RobotPlayer
                 rc.broadcast(GARDENER_SUM_CHANNEL, rc.readBroadcast(GARDENER_SUM_CHANNEL) + 1); //adds 1 to the sum channel
                 Direction dir = randomDirection();
 
-                //this block will execute for watering nearby trees
-                TreeInfo dyingTree = getDyingTree();
-                if (dyingTree != null)
-                {
-                    if (rc.canWater(dyingTree.getID()))
-                    { //tries to water the dying tree
-                        rc.water(dyingTree.getID());
-                    } else if (rc.canMove(dyingTree.getLocation()))
-                    { //if we have a dying tree, and we can move towards them, we do
-                        rc.move(dyingTree.getLocation());
-                    }
-                } else
-                {
-                    move(dir);
-                }
-
                 //building an early scout
+                /*
                 if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.SCOUT, dir))
                 { //to build an early scout, early tree shaking is very valuable
                     rc.buildRobot(RobotType.SCOUT, dir);
                 }
-
-                //building a garden
-                if (rc.getTreeCount() < rc.readBroadcast(MAX_TREES_CHANNEL) && rc.canPlantTree(dir))
-                { //if there aren't enough trees and a tree can be planted in the random direciton dir
-                    MapLocation[] archonStarts = rc.getInitialArchonLocations(rc.getTeam()); //get initial position of archons
-                    if (rc.getLocation().distanceTo(archonStarts[0]) >= 5) //if we're 3 units away from the initial position of the first archon, plant
-                    {
-                        rc.plantTree(dir);
-                    }
-                } else if (rc.getTeamBullets() > 80 && rc.canBuildRobot(RobotType.SCOUT, dir) && rc.readBroadcast(SCOUT_COUNT_CHANNEL) < MAX_SCOUTS)
+                */
+                TreeInfo[] nearby = rc.senseNearbyTrees((float)2.5, rc.getTeam());
+                //can build in any of the three directions
+                if((((rc.canPlantTree(Direction.getSouth()) && (rc.canPlantTree(Direction.getNorth()) && rc.canPlantTree(Direction.getEast()) && rc.canPlantTree(Direction.getWest())) && rc.getTeamBullets() >= 50)) || isNesting(nearby)))
                 {
-                    rc.buildRobot(RobotType.SCOUT, dir);
-                } else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.SOLDIER, dir) && rc.readBroadcast(SOLDIER_COUNT_CHANNEL) < MAX_SOLDIERS)
-                {
-                    rc.buildRobot(RobotType.SOLDIER, dir);
+                    nest();
                 }
+                else if(isInNest(nearby))
+                {
+                    System.out.println("IN NEST");
+                    //this block will execute for watering nearby trees
+                    TreeInfo dyingTree = getDyingTree();
+                    if (dyingTree != null)
+                    {
+                        if (rc.canWater(dyingTree.getID()))
+                        { //tries to water the dying tree
+                            rc.water(dyingTree.getID());
+                        } else if (rc.canMove(dyingTree.getLocation()))
+                        { //if we have a dying tree, and we can move towards them, we do
+                            rc.move(dyingTree.getLocation());
+                        }
+                    }
+
+                    else if (rc.getTeamBullets() > 80 && rc.canBuildRobot(RobotType.SCOUT, buildDirection) && rc.readBroadcast(SCOUT_COUNT_CHANNEL) < MAX_SCOUTS)
+                    {
+                        rc.buildRobot(RobotType.SCOUT, buildDirection);
+                    } else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.SOLDIER, buildDirection) && rc.readBroadcast(SOLDIER_COUNT_CHANNEL) < MAX_SOLDIERS)
+                    {
+                        rc.buildRobot(RobotType.SOLDIER, buildDirection);
+                    }
+
+                }
+                else
+                {
+                    move(dir);
+                }
+
+
+
+
+
+
+
 
                 Clock.yield();
             } catch (Exception e)
@@ -460,6 +472,57 @@ public strictfp class RobotPlayer
         }
         else //don't need to check cause this method will only be called if we can move either left or right
             return directionToBullet.rotateRightDegrees(90);
+    }
+
+    public static void nest() throws GameActionException
+    {
+        if(rc.canPlantTree(Direction.getNorth()))
+        {
+            rc.plantTree(Direction.getNorth());
+        }
+        else if(rc.canPlantTree(Direction.getWest()))
+        {
+            rc.plantTree(Direction.getWest());
+        }
+        else if(rc.canPlantTree(Direction.getEast()))
+        {
+            rc.plantTree(Direction.getEast());
+        }
+    }
+
+    public static boolean isInNest(TreeInfo[] nearbyTrees)
+    {
+
+        if(nearbyTrees.length < 3)
+        {
+            return false;
+        }
+        for(int i = 0; i < nearbyTrees.length; i++) //traverse the treeinfo array
+        {
+            Direction dirToTree = rc.getLocation().directionTo(nearbyTrees[i].getLocation());
+            if(!(dirToTree.degreesBetween(Direction.getNorth()) < 1) && !(dirToTree.degreesBetween(Direction.getEast()) < 1) && !(dirToTree.degreesBetween(Direction.getWest()) < 1)) //if the direction between us and the tree is not evenly divisible by 90 degrees (in radians), return false
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static boolean isNesting(TreeInfo[] nearbyTrees)
+    {
+        if(nearbyTrees.length == 0 || nearbyTrees.length >= 3)
+        {
+            return false;
+        }
+        for(int i = 0; i < nearbyTrees.length; i++)
+        {
+            Direction dirToTree = rc.getLocation().directionTo(nearbyTrees[i].getLocation());
+            if(!(dirToTree.degreesBetween(Direction.getNorth()) < 1) && !(dirToTree.degreesBetween(Direction.getEast()) < 1) && !(dirToTree.degreesBetween(Direction.getWest()) < 1)) //if the direction between us and the tree is not evenly divisible by 90 degrees (in radians), return false
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
 
