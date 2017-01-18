@@ -19,10 +19,15 @@ public strictfp class RobotPlayer
     static final int ATTACK_LOCATION_Y_CHANNEL = 9;
     static final int MAX_TREES_CHANNEL = 10; // holds max trees, so the amount of trees scales to the number of gardeners
     static final int MAX_SOLDIER_CHANNEL = 11;
+    static final int LUMBERJACK_LOCATION_X_CHANNEL = 12;
+    static final int LUMBERJACK_LOCATION_Y_CHANNEL = 13;
+    static final int LUMBERJACK_COUNT_CHANNEL = 14;
+    static final int LUMBERJACK_SUM_CHANNEL = 15;
+    static final int OBSTRUCTION_CHANNEL = 16;
 
     static final int MAX_GARDENERS = 5; //max number of gardeners we want to build
     static final int MAX_SCOUTS = 3;
-    static final int MAX_SOLDIERS = 9;
+    static final int MAX_LUMBERJACKS = 3;
     static Direction buildDirection = Direction.getSouth();
 
     /**
@@ -73,7 +78,7 @@ public strictfp class RobotPlayer
                 if (rc.getRoundNum() == 1 && rc.readBroadcast(HEAD_ARCHON_CHANNEL) == 0)
                 { // excecuted only on first round, sends the senior archon's ID to the head archon channel
                     rc.broadcast(HEAD_ARCHON_CHANNEL, rc.getID());
-                    rc.broadcast(MAX_SOLDIER_CHANNEL, 8);
+                    rc.broadcast(MAX_SOLDIER_CHANNEL, 10);
                 }
                 //this method of counting makes bots easy to track by enemies
                 if (rc.getID() == rc.readBroadcast(HEAD_ARCHON_CHANNEL))
@@ -84,6 +89,8 @@ public strictfp class RobotPlayer
                     rc.broadcast(SCOUT_SUM_CHANNEL, 0);
                     rc.broadcast(SOLDIER_COUNT_CHANNEL, rc.readBroadcast(SOLDIER_SUM_CHANNEL));
                     rc.broadcast(SOLDIER_SUM_CHANNEL, 0);
+                    rc.broadcast(LUMBERJACK_COUNT_CHANNEL, rc.readBroadcast(LUMBERJACK_SUM_CHANNEL));
+                    rc.broadcast(LUMBERJACK_SUM_CHANNEL, 0);
                     if (rc.getTeamBullets() > 500)
                     {
                         rc.donate(10); //getting victory points
@@ -154,7 +161,12 @@ public strictfp class RobotPlayer
                     else if (rc.getTeamBullets() > 80 && rc.canBuildRobot(RobotType.SCOUT, buildDirection) && rc.readBroadcast(SCOUT_COUNT_CHANNEL) < MAX_SCOUTS)
                     {
                         rc.buildRobot(RobotType.SCOUT, buildDirection);
-                    } else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.SOLDIER, buildDirection) && rc.readBroadcast(SOLDIER_COUNT_CHANNEL) < rc.readBroadcast(MAX_SOLDIER_CHANNEL))
+                    }
+                    else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.LUMBERJACK, buildDirection) && rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) < MAX_LUMBERJACKS)
+                    {
+                        rc.buildRobot(RobotType.LUMBERJACK, buildDirection);
+                    }
+                    else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.SOLDIER, buildDirection) && rc.readBroadcast(SOLDIER_COUNT_CHANNEL) < rc.readBroadcast(MAX_SOLDIER_CHANNEL))
                     {
                         rc.buildRobot(RobotType.SOLDIER, buildDirection);
                     }
@@ -182,6 +194,7 @@ public strictfp class RobotPlayer
                 rc.broadcast(SOLDIER_SUM_CHANNEL, rc.readBroadcast(SOLDIER_SUM_CHANNEL) + 1); //counter for soldiers
                 Direction dir = randomDirection(); //direction we will eventually move, starts out random
                 boolean moved = false;
+                Direction fired = null;
 
                 //dodge incoming bullets first
                 BulletInfo[] nearbyBullets = rc.senseNearbyBullets(3); //sense nearby bullets in a radius of 3 units around
@@ -193,43 +206,79 @@ public strictfp class RobotPlayer
                         if(canDodge(incomingBullet.getDir())) //if we can dodge left or right
                         {
                             dir = dodgeDirection(rc.getLocation().directionTo(incomingBullet.getLocation()));
+                            moved = tryMove(dir);
                         }
                         else //if we can't dodge left or right, set movement direction away from bullet
                         {
                             dir = rc.getLocation().directionTo(incomingBullet.getLocation()).rotateLeftDegrees(180); //move away from the bullet
+                            moved = tryMove(dir);
                         }
                     }
 
                 }
 
+                //firing at enemies
                 RobotInfo[] enemyBots = rc.senseNearbyRobots(RobotType.SOLDIER.bodyRadius + RobotType.SOLDIER.sensorRadius, rc.getTeam().opponent()); //sense all enemy bots nearby and put it into an array
                 if (enemyBots.length != 0)
                 { //if there are nearby enemies, fire at them
+                    Direction firingDirection = rc.getLocation().directionTo(enemyBots[0].getLocation());
                     if(enemyBots[0].getLocation().isWithinDistance(rc.getLocation(), 4))
                     {
-                        fireTriadBullet(enemyBots[0].getLocation());
+                        if(!willFriendlyFire(firingDirection))
+                        {
+                            fired = fireTriadBullet(enemyBots[0].getLocation());
+                        }
+                        else
+                        {
+                            moved = tryMove(firingDirection.rotateLeftDegrees(90));
+                        }
                     }
-                    fireBullet(enemyBots[0].getLocation());
+                    if(!willFriendlyFire(firingDirection))
+                    {
+                        fired = fireBullet(enemyBots[0].getLocation());
+                    }
+                    else
+                    {
+                        moved = tryMove(firingDirection.rotateLeftDegrees(90));
+                    }
                 }
+
+                //if there is an attack location
                 if (rc.readBroadcast(ATTACK_LOCATION_X_CHANNEL) != 0)
                 {
                     System.out.println("Moving to target location"); //for debugging
                     MapLocation attackLocation = new MapLocation((float) rc.readBroadcast(ATTACK_LOCATION_X_CHANNEL), (float) rc.readBroadcast(ATTACK_LOCATION_Y_CHANNEL)); //creates a maplocation of the attack target
-                    if (rc.getLocation().distanceTo(attackLocation) < 1)
+                    if (rc.getLocation().distanceTo(attackLocation) < 1) //if we are close to the attack location
                     {
-                        if (!canSenseEnemyGarden(rc.getType().bodyRadius + rc.getType().sensorRadius))
+                        if (!canSenseEnemyGarden(rc.getType().bodyRadius + rc.getType().sensorRadius)) //if we don't sense any more gardens, reset the location
                         {
                             rc.broadcast(ATTACK_LOCATION_X_CHANNEL, 0);
                             rc.broadcast(ATTACK_LOCATION_Y_CHANNEL, 0);
                         }
-                    } else
+                    } else //otherwise, move to
                     {
                         Direction directionToTarget = rc.getLocation().directionTo(attackLocation);
                         moved = tryMove(directionToTarget); //try to move to that location
+                        if(!moved)
+                        {
+                            TreeInfo[] neutralTrees = rc.senseNearbyTrees((float)4, Team.NEUTRAL);
+                            if(neutralTrees.length != 0)
+                            {
+                                rc.broadcast(OBSTRUCTION_CHANNEL, rc.readBroadcast(OBSTRUCTION_CHANNEL) + 1);
+                                if(rc.readBroadcast(OBSTRUCTION_CHANNEL) >= 10)
+                                {
+                                    rc.broadcast(LUMBERJACK_LOCATION_X_CHANNEL, (int)neutralTrees[0].getLocation().x);
+                                    rc.broadcast(LUMBERJACK_LOCATION_Y_CHANNEL, (int)neutralTrees[0].getLocation().y);
+                                    rc.broadcast(OBSTRUCTION_CHANNEL, 0);
+                                }
+                            }
+                            tryMove(directionToTarget.rotateLeftDegrees(90));
+                        }
+
 
                     }
                 }
-                if(!moved)
+                if(!moved && (fired == null))
                 {
                     move(dir);
                 }
@@ -248,6 +297,94 @@ public strictfp class RobotPlayer
         {
             try
             {
+                rc.broadcast(LUMBERJACK_SUM_CHANNEL, rc.readBroadcast(LUMBERJACK_SUM_CHANNEL) + 1);
+                RobotInfo[] nearbyEnemies = rc.senseNearbyRobots((float)4, rc.getTeam().opponent());
+                BulletInfo[] nearbyBullets = rc.senseNearbyBullets(3);
+                RobotInfo[] nearbyAllies = rc.senseNearbyRobots(2, rc.getTeam());
+                Direction dir = randomDirection();
+                boolean moved = false;
+
+                //dodging block should be executed first, so they don't blindly run into bullets on their way to a location
+                if (nearbyBullets.length != 0)
+                {
+                    if(bulletWillCollide(nearbyBullets[0])) //if we're in the path of a bullet
+                    {//dodge
+                        BulletInfo incomingBullet = nearbyBullets[0];
+                        if(canDodge(incomingBullet.getDir())) //if we can dodge left or right
+                        {
+                            dir = dodgeDirection(rc.getLocation().directionTo(incomingBullet.getLocation()));
+                            moved = tryMove(dir);
+                        }
+                        else //if we can't dodge left or right, set movement direction away from bullet
+                        {
+                            dir = rc.getLocation().directionTo(incomingBullet.getLocation()).rotateLeftDegrees(180); //move away from the bullet
+                            moved = tryMove(dir);
+                        }
+                    }
+                }
+
+                //if lumberjacks are needed somewhere - this is priority
+                if(rc.readBroadcast(LUMBERJACK_LOCATION_X_CHANNEL) != 0) //if theres a chop location
+                {//execute code for lumberjacks completing a task
+                    MapLocation chopLocation = new MapLocation((float)rc.readBroadcast(LUMBERJACK_LOCATION_X_CHANNEL), (float)rc.readBroadcast(LUMBERJACK_LOCATION_Y_CHANNEL)); //create a maplocation for the chop location
+                    if(rc.getLocation().distanceTo(chopLocation) < 3) //if we are at the chop location
+                    {
+                        TreeInfo[] neutralTrees = rc.senseNearbyTrees(5, Team.NEUTRAL);
+                        if(neutralTrees.length != 0) //if there are neutral trees at the location
+                        {
+                            TreeInfo closeNeutralTree = neutralTrees[0];
+                            if(rc.canChop(closeNeutralTree.getID())) //if we can chop the nearest tree
+                            {
+                               System.out.println("chopping");
+                                rc.chop(closeNeutralTree.getID()); //chop it
+                            }
+                            else if(nearbyAllies.length == 0 && rc.canStrike() && rc.getLocation().distanceTo(closeNeutralTree.getLocation()) < 2)
+                            {
+                                rc.strike();
+                            }
+                            else // if we can't
+                            {
+                                System.out.println("CAN'T CHOP CANNOT CHOP BITCH I CANNOT CHIP DIS TREE");
+                                dir = rc.getLocation().directionTo(closeNeutralTree.getLocation()); //move towards it
+                                moved = tryMove(dir);
+                            }
+                        }
+                        else //if there are no neutral trees at the location, reset the chop location channels
+                        {
+                            System.out.println("resetting location");
+                            rc.broadcast(LUMBERJACK_LOCATION_X_CHANNEL, 0);
+                            rc.broadcast(LUMBERJACK_LOCATION_Y_CHANNEL, 0);
+                        }
+                    }
+                    else //if we aren't at the chop location, move to it
+                    {
+                        System.out.println("moving to location");
+                        dir = rc.getLocation().directionTo(chopLocation);
+                        moved = tryMove(dir);
+                        if(!moved)
+                        {
+                            tryMove(dir.rotateLeftDegrees(90));
+                        }
+                    }
+                    dir = rc.getLocation().directionTo(chopLocation);
+                }
+                else if(nearbyEnemies.length != 0) //otherwise, if there are enemies, try to move or get in range
+                {
+                    dir = rc.getLocation().directionTo(nearbyEnemies[0].getLocation());
+
+                    if(nearbyAllies.length == 0 && rc.canStrike() && rc.getLocation().distanceTo(nearbyEnemies[0].getLocation()) < (float)2)
+                    {
+                        rc.strike();
+                    }
+                    else
+                    {
+                        moved = tryMove(dir);
+                    }
+                }
+                if(!moved)
+                {
+                    move(dir);
+                }
                 Clock.yield();
             } catch (Exception e)
             {
@@ -545,6 +682,20 @@ public strictfp class RobotPlayer
     public static boolean isNestable()
     {
         return (((rc.canPlantTree(Direction.getSouth()) && (rc.canPlantTree(Direction.getNorth()) && rc.canPlantTree(Direction.getEast()) && rc.canPlantTree(Direction.getWest())) && rc.getTeamBullets() >= 50)));
+    }
+
+    public static boolean willFriendlyFire(Direction firingDirection)
+    {
+        RobotInfo[] friendlies = rc.senseNearbyRobots(3, rc.getTeam());
+        for(int i = 0; i < friendlies.length; i++)
+        {
+            Direction dirToFriendly = rc.getLocation().directionTo(friendlies[i].getLocation());
+            if(dirToFriendly.equals(firingDirection, (float).4))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
 
