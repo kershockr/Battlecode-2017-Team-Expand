@@ -1,8 +1,8 @@
-package timsplayer;
+package Expandboys;
 
 import battlecode.common.*;
 
-import java.util.*;
+import java.util.Random;
 
 public strictfp class RobotPlayer
 {
@@ -17,7 +17,7 @@ public strictfp class RobotPlayer
     static final int SOLDIER_SUM_CHANNEL = 7;
     static final int ATTACK_LOCATION_X_CHANNEL = 8; // holds the x location (rounded to the nearest int) of a high priority target (like enemy tree garden)
     static final int ATTACK_LOCATION_Y_CHANNEL = 9;
-    static final int MAX_TREES_CHANNEL = 10; // holds max trees, so the amount of trees scales to the number of gardeners
+    static final int EXTREME_PERIL_CHANNEL = 10; // holds max trees, so the amount of trees scales to the number of gardeners
     static final int MAX_SOLDIER_CHANNEL = 11;
     static final int LUMBERJACK_LOCATION_X_CHANNEL = 12;
     static final int LUMBERJACK_LOCATION_Y_CHANNEL = 13;
@@ -115,7 +115,7 @@ public strictfp class RobotPlayer
                     {
                         System.out.println(rc.readBroadcast(GARDENER_COUNT_CHANNEL));
                     }
-                    rc.setIndicatorDot(rc.getLocation(), 256, 0,0);
+
                 }
 
                 move(dir);
@@ -149,7 +149,7 @@ public strictfp class RobotPlayer
                 nestComplete = (nearbyTrees.length >= 5); //will check if we have enough trees in our nest. if we do, nest is complete
 
                 //building an early scout
-                if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.SCOUT, nestDirection))
+                if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) <= 1 && rc.canBuildRobot(RobotType.SCOUT, nestDirection))
                 { //to build an early scout, early tree shaking is very valuable
                     rc.buildRobot(RobotType.SCOUT, nestDirection);
                 } else if (rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection))
@@ -203,7 +203,6 @@ public strictfp class RobotPlayer
                             nestLocation = null;
                         }
 
-                        rc.setIndicatorDot(nestLocation, 0, 0, 256);
                         if(rc.getLocation().distanceTo(nestLocation) < 1) //this handles the special case of needing to move to the exact maplocation
                         {
                             rc.move(nestLocation);
@@ -373,11 +372,26 @@ public strictfp class RobotPlayer
             try
             {
                 rc.broadcast(LUMBERJACK_SUM_CHANNEL, rc.readBroadcast(LUMBERJACK_SUM_CHANNEL) + 1);
-                RobotInfo[] nearbyEnemies = rc.senseNearbyRobots((float)4, rc.getTeam().opponent());
+                RobotInfo[] nearbyEnemies = rc.senseNearbyRobots((float)6, rc.getTeam().opponent());
                 BulletInfo[] nearbyBullets = rc.senseNearbyBullets(3);
                 RobotInfo[] nearbyAllies = rc.senseNearbyRobots(2, rc.getTeam());
                 Direction dir = randomDirection();
                 boolean moved = false;
+
+                if(nearbyEnemies.length != 0) //otherwise, if there are enemies, try to move or get in range
+                {
+                    dir = rc.getLocation().directionTo(nearbyEnemies[0].getLocation());
+
+                    if(rc.canStrike() && rc.getLocation().distanceTo(nearbyEnemies[0].getLocation()) < (float)3)
+                    {
+                        rc.strike();
+                    }
+                    else if(rc.getLocation().distanceTo(nearbyEnemies[0].getLocation()) > (float)3)
+                    {
+                        tryMove(rc.getLocation().directionTo(nearbyEnemies[0].getLocation()));
+                    }
+                }
+
 
                 //chopping block (get it?)
                 TreeInfo[] neutralTrees = rc.senseNearbyTrees(5, Team.NEUTRAL);
@@ -447,15 +461,7 @@ public strictfp class RobotPlayer
                     }
                     dir = rc.getLocation().directionTo(chopLocation);
                 }
-                else if(nearbyEnemies.length != 0) //otherwise, if there are enemies, try to move or get in range
-                {
-                    dir = rc.getLocation().directionTo(nearbyEnemies[0].getLocation());
 
-                    if(rc.canStrike() && rc.getLocation().distanceTo(nearbyEnemies[0].getLocation()) < (float)2)
-                    {
-                        rc.strike();
-                    }
-                }
                 if(!moved)
                 {
                     rc.setIndicatorDot(rc.getLocation(), 0, 256, 256);
@@ -570,8 +576,6 @@ public strictfp class RobotPlayer
     {
         MapLocation[] archons = rc.getInitialArchonLocations(rc.getTeam().opponent());
         Direction dir = rc.getLocation().directionTo(archons[0]);
-        boolean hasTarget = false;
-        boolean lineOfSight = false;
         float senseRadius = rc.getType().bodyRadius + rc.getType().sensorRadius;
 
 
@@ -600,7 +604,8 @@ public strictfp class RobotPlayer
                     //if we can't get a clear shot, move after firing
                     if(bulletBlockedByTree(dirToTarget, targetGardener))
                     {
-                        tryMove(dirToTarget.rotateLeftDegrees(90));
+                        rc.move(rc.getLocation().add(dirToTarget, (float).1));
+                        tryMove(dirToTarget.rotateLeftDegrees(45));
                     }
 
                 }
@@ -924,7 +929,7 @@ public strictfp class RobotPlayer
             for(int i = 0; i < treesToTarget.length; i++)
             {
                 Direction dirTreeToTarget = treesToTarget[i].getLocation().directionTo(target.getLocation());
-                if(firingDirection.equals(dirTreeToTarget, (float).34))
+                if(firingDirection.equals(dirTreeToTarget, (float).2))
                 {
                     return true;
                 }
