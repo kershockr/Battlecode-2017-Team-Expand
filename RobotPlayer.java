@@ -24,6 +24,7 @@ public strictfp class RobotPlayer
     static final int LUMBERJACK_COUNT_CHANNEL = 14;
     static final int LUMBERJACK_SUM_CHANNEL = 15;
     static final int OBSTRUCTION_CHANNEL = 16;
+    static final int PATH_CHANGE_DEGREES_CHANNEL = 17;
 
     static final int MAX_GARDENERS = 5; //max number of gardeners we want to build
     static final int MAX_SCOUTS = 3;
@@ -91,6 +92,7 @@ public strictfp class RobotPlayer
                     rc.broadcast(SOLDIER_SUM_CHANNEL, 0);
                     rc.broadcast(LUMBERJACK_COUNT_CHANNEL, rc.readBroadcast(LUMBERJACK_SUM_CHANNEL));
                     rc.broadcast(LUMBERJACK_SUM_CHANNEL, 0);
+                    rc.broadcast(PATH_CHANGE_DEGREES_CHANNEL, (rc.getRoundNum() % 400 < 200)?90:270);
                     if (rc.getTeamBullets() > 500)
                     {
                         rc.donate(10); //getting victory points
@@ -277,7 +279,7 @@ public strictfp class RobotPlayer
                                     rc.firePentadShot(rc.getLocation().directionTo(neutralTrees[0].getLocation()));
                                 }
                             }
-                            tryMove(directionToTarget.rotateLeftDegrees(90));
+                            tryMove(directionToTarget.rotateLeftDegrees(rc.readBroadcast(PATH_CHANGE_DEGREES_CHANNEL)));
                         }
 
 
@@ -306,8 +308,27 @@ public strictfp class RobotPlayer
                 RobotInfo[] nearbyEnemies = rc.senseNearbyRobots((float)4, rc.getTeam().opponent());
                 BulletInfo[] nearbyBullets = rc.senseNearbyBullets(3);
                 RobotInfo[] nearbyAllies = rc.senseNearbyRobots(2, rc.getTeam());
+                TreeInfo[] neutralTrees = rc.senseNearbyTrees(6, Team.NEUTRAL);
+                TreeInfo closeNeutralTree = neutralTrees[0];
                 Direction dir = randomDirection();
                 boolean moved = false;
+
+                if(neutralTrees.length != 0)
+                {
+                    if(rc.canChop(closeNeutralTree.getID())) //if we can chop the nearest tree
+                    {
+                        rc.setIndicatorDot(closeNeutralTree.getLocation(), 256, 0, 0);
+                        System.out.println("chopping");
+                        rc.chop(closeNeutralTree.getID()); //chop it
+                    }
+                    else // if we can't
+                    {
+                        System.out.println("CAN'T CHOP");
+                        dir = rc.getLocation().directionTo(closeNeutralTree.getLocation()); //move towards it
+                        rc.setIndicatorLine(rc.getLocation(), closeNeutralTree.getLocation(), 256, 0,0);
+                        moved = tryMove(dir);
+                    }
+                }
 
                 //dodging block should be executed first, so they don't blindly run into bullets on their way to a location
                 if (nearbyBullets.length != 0)
@@ -334,10 +355,9 @@ public strictfp class RobotPlayer
                     MapLocation chopLocation = new MapLocation((float)rc.readBroadcast(LUMBERJACK_LOCATION_X_CHANNEL), (float)rc.readBroadcast(LUMBERJACK_LOCATION_Y_CHANNEL)); //create a maplocation for the chop location
                     if(rc.getLocation().distanceTo(chopLocation) < 5) //if we are at the chop location
                     {
-                        TreeInfo[] neutralTrees = rc.senseNearbyTrees(5, Team.NEUTRAL);
+
                         if(neutralTrees.length != 0) //if there are neutral trees at the location
                         {
-                            TreeInfo closeNeutralTree = neutralTrees[0];
                             if(rc.canChop(closeNeutralTree.getID())) //if we can chop the nearest tree
                             {
                                System.out.println("chopping");
