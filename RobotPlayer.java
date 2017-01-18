@@ -166,7 +166,7 @@ public strictfp class RobotPlayer
                     {
                         rc.buildRobot(RobotType.LUMBERJACK, buildDirection);
                     }
-                    else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.SOLDIER, buildDirection) && rc.readBroadcast(SOLDIER_COUNT_CHANNEL) < rc.readBroadcast(MAX_SOLDIER_CHANNEL))
+                    else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.SOLDIER, buildDirection))
                     {
                         rc.buildRobot(RobotType.SOLDIER, buildDirection);
                     }
@@ -271,6 +271,11 @@ public strictfp class RobotPlayer
                                     rc.broadcast(LUMBERJACK_LOCATION_Y_CHANNEL, (int)neutralTrees[0].getLocation().y);
                                     rc.broadcast(OBSTRUCTION_CHANNEL, 0);
                                 }
+                                else if(rc.getLocation().distanceTo(neutralTrees[0].getLocation()) < 3 && rc.canFirePentadShot())
+                                {
+                                    System.out.println("Fired pentad shot");
+                                    rc.firePentadShot(rc.getLocation().directionTo(neutralTrees[0].getLocation()));
+                                }
                             }
                             tryMove(directionToTarget.rotateLeftDegrees(90));
                         }
@@ -327,7 +332,7 @@ public strictfp class RobotPlayer
                 if(rc.readBroadcast(LUMBERJACK_LOCATION_X_CHANNEL) != 0) //if theres a chop location
                 {//execute code for lumberjacks completing a task
                     MapLocation chopLocation = new MapLocation((float)rc.readBroadcast(LUMBERJACK_LOCATION_X_CHANNEL), (float)rc.readBroadcast(LUMBERJACK_LOCATION_Y_CHANNEL)); //create a maplocation for the chop location
-                    if(rc.getLocation().distanceTo(chopLocation) < 3) //if we are at the chop location
+                    if(rc.getLocation().distanceTo(chopLocation) < 5) //if we are at the chop location
                     {
                         TreeInfo[] neutralTrees = rc.senseNearbyTrees(5, Team.NEUTRAL);
                         if(neutralTrees.length != 0) //if there are neutral trees at the location
