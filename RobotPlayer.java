@@ -125,6 +125,7 @@ public strictfp class RobotPlayer
         boolean nestComplete = false;
         MapLocation[] enemyLocation = rc.getInitialArchonLocations(rc.getTeam().opponent());
         Direction nestDirection = rc.getLocation().directionTo(enemyLocation[0]);
+        int scoutsBuilt = 0;
         if(rc.getRoundNum() > 2990)
         {
             rc.donate(rc.getTeamBullets());
@@ -141,89 +142,88 @@ public strictfp class RobotPlayer
                 nestComplete = (nearbyTrees.length >= 5); //will check if we have enough trees in our nest. if we do, nest is complete
 
                 //building an early scout
-
-                if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) <= 1 && rc.canBuildRobot(RobotType.SCOUT, nestDirection))
-                { //to build an early scout, early tree shaking is very valuable
-                    rc.buildRobot(RobotType.SCOUT, nestDirection);
-                }
                 if (rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection))
                 { //to build an early jack, protects us a bit and helps clear shite
                     rc.buildRobot(RobotType.LUMBERJACK, nestDirection);
                 }
-
-                if(rc.getLocation().equals(nestLocation)) //are you in your nest
-                {//yes
-                    if(nestComplete) //is your nest complete?
-                    {//yes
-                        rc.setIndicatorDot(rc.getLocation(), 0,256,0);
-
-                        //this block will execute for watering nearby trees
-                        TreeInfo dyingTree = getDyingTree();
-                        if (dyingTree != null)
-                        {
-                            if (rc.canWater(dyingTree.getID()))
-                            { //tries to water the dying tree
-                                rc.water(dyingTree.getID());
-                            } else if (rc.canMove(dyingTree.getLocation()))
-                            { //if we have a dying tree, and we can move towards them, we do
-                                rc.move(dyingTree.getLocation());
-                            }
-                        }
-                        if (rc.getTeamBullets() > 80 && rc.canBuildRobot(RobotType.SCOUT, nestDirection) && rc.readBroadcast(SCOUT_COUNT_CHANNEL) < MAX_SCOUTS)
-                        {
-                            rc.buildRobot(RobotType.SCOUT, nestDirection);
-                        }
-                        else if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection) && rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) < MAX_LUMBERJACKS)
-                        {
-                            rc.buildRobot(RobotType.LUMBERJACK, nestDirection);
-                        }
-                        else if (rc.canBuildRobot(RobotType.SOLDIER, nestDirection))
-                        {
-                            rc.buildRobot(RobotType.SOLDIER, nestDirection);
-                        }
-                    }
-                    else
-                    {//no
-                        nest(rc.getLocation(), nestDirection);
-                    }
+                else if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) <= 1 && rc.canBuildRobot(RobotType.SCOUT, nestDirection))
+                { //to build an early scout, early tree shaking is very valuable
+                    rc.buildRobot(RobotType.SCOUT, nestDirection);
                 }
-                else
-                {//no
-                    if(nestLocation != null) //do you have a nest location?
-                    {//yes
-                        //move to it
-                        if(rc.isCircleOccupiedExceptByThisRobot(nestLocation, (float)3) || !rc.onTheMap(nestLocation, (float) 3))
-                        {
-                            nestLocation = null;
-                        }
 
-                        if(rc.getLocation().distanceTo(nestLocation) < 1) //this handles the special case of needing to move to the exact maplocation
-                        {
-                            rc.move(nestLocation);
-                        }
-                        else
-                        {
-                            movingDirection = rc.getLocation().directionTo(nestLocation); //move in it's direction
-                            tryMove(movingDirection);
-                        }
-                    }
-                    else
-                    {//no
-                        float offset = 0; //try to find one
-                        while(offset <= 3 && nestLocation == null) //while we haven't checked more than 3 times and we haven't found a nest yet
-                        {
-                            MapLocation center = rc.getLocation().add(nestDirection.rotateLeftDegrees(180), offset);
-                            if(!rc.isCircleOccupiedExceptByThisRobot(center, (float)3) && rc.onTheMap(center, (float) 3)) // if the circle is empty except this robot
+                if(rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) > 0)
+                {
+                    if (rc.getLocation().equals(nestLocation)) //are you in your nest
+                    {//yes
+                        if (nestComplete) //is your nest complete?
+                        {//yes
+                            rc.setIndicatorDot(rc.getLocation(), 0, 256, 0);
+
+                            //this block will execute for watering nearby trees
+                            TreeInfo dyingTree = getDyingTree();
+                            if (dyingTree != null)
                             {
-                                nestLocation = center; //set the nest location to the empty circle
+                                if (rc.canWater(dyingTree.getID()))
+                                { //tries to water the dying tree
+                                    rc.water(dyingTree.getID());
+                                } else if (rc.canMove(dyingTree.getLocation()))
+                                { //if we have a dying tree, and we can move towards them, we do
+                                    rc.move(dyingTree.getLocation());
+                                }
                             }
-                            offset += 1;
+                            if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection) && rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) < MAX_LUMBERJACKS)
+                            {
+                                rc.buildRobot(RobotType.LUMBERJACK, nestDirection);
+                            }
+                            else if(rc.canBuildRobot(RobotType.SCOUT, nestDirection) && scoutsBuilt < 1)
+                            {
+                                rc.buildRobot(RobotType.SCOUT, nestDirection);
+                                scoutsBuilt++;
+                            }
+                            else if (rc.canBuildRobot(RobotType.SOLDIER, nestDirection))
+                            {
+                                rc.buildRobot(RobotType.SOLDIER, nestDirection);
+                            }
+                        } else
+                        {//no
+                            nest(rc.getLocation(), nestDirection);
                         }
-                        //if you still haven't found a nest, move randomly
-                        if(nestLocation == null)
-                        {
-                            movingDirection = randomDirection();
-                            tryMove(movingDirection);
+                    } else
+                    {//no
+                        if (nestLocation != null) //do you have a nest location?
+                        {//yes
+                            //move to it
+                            if (rc.isCircleOccupiedExceptByThisRobot(nestLocation, (float) 3) || !rc.onTheMap(nestLocation, (float) 3))
+                            {
+                                nestLocation = null;
+                            }
+
+                            if (rc.getLocation().distanceTo(nestLocation) < 1) //this handles the special case of needing to move to the exact maplocation
+                            {
+                                rc.move(nestLocation);
+                            } else
+                            {
+                                movingDirection = rc.getLocation().directionTo(nestLocation); //move in it's direction
+                                tryMove(movingDirection);
+                            }
+                        } else
+                        {//no
+                            float offset = 0; //try to find one
+                            while (offset <= 3 && nestLocation == null) //while we haven't checked more than 3 times and we haven't found a nest yet
+                            {
+                                MapLocation center = rc.getLocation().add(nestDirection.rotateLeftDegrees(180), offset);
+                                if (!rc.isCircleOccupiedExceptByThisRobot(center, (float) 3) && rc.onTheMap(center, (float) 3)) // if the circle is empty except this robot
+                                {
+                                    nestLocation = center; //set the nest location to the empty circle
+                                }
+                                offset += 1;
+                            }
+                            //if you still haven't found a nest, move randomly
+                            if (nestLocation == null)
+                            {
+                                movingDirection = randomDirection();
+                                tryMove(movingDirection);
+                            }
                         }
                     }
                 }
@@ -415,6 +415,13 @@ public strictfp class RobotPlayer
                 }
                 else if (nearbyNeutralTrees.length != 0) //otherwise, if there are neutral trees near us
                 {
+                    if(nearbyNeutralTrees[0].getContainedBullets() > 0)
+                    {
+                        if(rc.canShake(nearbyNeutralTrees[0].getID()))
+                        {
+                            rc.shake(nearbyNeutralTrees[0].getID());
+                        }
+                    }
                     chopTree(nearbyNeutralTrees[0]); //move to and chop the nearest tree
                 }
                 else //otherwise, if we have nothing to do
@@ -578,7 +585,7 @@ public strictfp class RobotPlayer
                             }
                         }
                     }
-                    else
+                    else //if we aren't close to the enemy, move towards it
                     {
                         pathTo(targetLocation);
                     }
@@ -587,7 +594,7 @@ public strictfp class RobotPlayer
                 {
                     for(int i = 0; i < nearbyNeutralTrees.length; i++)
                     {
-                        if(nearbyNeutralTrees[i].getContainedBullets() > 0)
+                        if(nearbyNeutralTrees[i].getContainedBullets() > 0) //if they are shakeable
                         {
                             targetLocation = nearbyNeutralTrees[i].getLocation();
                             break;
@@ -596,32 +603,30 @@ public strictfp class RobotPlayer
 
                     if(targetLocation != null)
                     {
-                        if(rc.canShake(targetLocation))
+                        if(rc.canShake(targetLocation)) //if we can shake them
                         {
-                            rc.shake(targetLocation);
+                            rc.shake(targetLocation); //shake
                         }
                         else
                         {
-                            pathTo(targetLocation);
+                            pathTo(targetLocation); //otherwise move towards them and try to shake again
                             if(rc.canShake(targetLocation))
                             {
                                 rc.shake(targetLocation);
                             }
                         }
                     }
-                    else
-                    {
-                        tryMove(dir);
-                    }
                 }
-                else
+                if(!rc.hasMoved())
                 {
                     boolean moved = tryMove(dir);
                     if(!moved)
                     {
                         dir = randomDirection();
+                        tryMove(dir);
                     }
                 }
+
                 if(rc.getRoundNum() % 100 == 0)
                 {
                     dir = rc.getLocation().directionTo(archons[0]);
@@ -636,6 +641,12 @@ public strictfp class RobotPlayer
                     MapLocation nestTree = enemyTrees[enemyTrees.length / 2].getLocation();
                     rc.broadcast(ATTACK_LOCATION_X_CHANNEL, (int) nestTree.x); //broadcast the closest x value to the x coord channel
                     rc.broadcast(ATTACK_LOCATION_Y_CHANNEL, (int) nestTree.y);
+                }
+                if(nearbyEnemies.length >= 10)
+                {
+                    MapLocation armyLocation = nearbyEnemies[5].getLocation();
+                    rc.broadcast(ATTACK_LOCATION_X_CHANNEL, (int)armyLocation.x);
+                    rc.broadcast(ATTACK_LOCATION_Y_CHANNEL, (int)armyLocation.y);
                 }
                 Clock.yield();
             } catch (Exception e)
