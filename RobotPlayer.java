@@ -128,11 +128,7 @@ public strictfp class RobotPlayer
         boolean nestComplete = false;
         MapLocation[] enemyLocation = rc.getInitialArchonLocations(rc.getTeam().opponent());
         Direction nestDirection = rc.getLocation().directionTo(enemyLocation[0]);
-        int scoutsBuilt = 0;
-        if(rc.getRoundNum() > 2990)
-        {
-            rc.donate(rc.getTeamBullets());
-        }
+        int unitsBuilt = 0;
 
         while(true)
         {
@@ -146,13 +142,11 @@ public strictfp class RobotPlayer
 
                 //building an early scout
                 if (rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection))
-                { //to build an early jack, protects us a bit and helps clear shite
-                    System.out.println("Building early jack");
+                { //to build an early jack, protects us a bit and helps clear shit
                     rc.buildRobot(RobotType.LUMBERJACK, nestDirection);
                 }
-                else if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) <= 1 && rc.canBuildRobot(RobotType.SCOUT, nestDirection))
+                else if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.SCOUT, nestDirection))
                 { //to build an early scout, early tree shaking is very valuable
-                    System.out.println("    ");
                     rc.buildRobot(RobotType.SCOUT, nestDirection);
                 }
 
@@ -175,19 +169,35 @@ public strictfp class RobotPlayer
                                     rc.move(dyingTree.getLocation());
                                 }
                             }
-                            if (rc.getTeamBullets() > 100 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection) && rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) < MAX_LUMBERJACKS)
+
+                            //building units
+                            if (unitsBuilt % 6 <= 3) //first four builds should be soldiers
                             {
-                                rc.buildRobot(RobotType.LUMBERJACK, nestDirection);
+                                if (rc.canBuildRobot(RobotType.SOLDIER, nestDirection))
+                                {
+                                    rc.buildRobot(RobotType.SOLDIER, nestDirection);
+                                    unitsBuilt++;
+                                }
                             }
-                            else if(rc.canBuildRobot(RobotType.SCOUT, nestDirection) && scoutsBuilt < 1)
+                            else if(unitsBuilt % 6 == 4)
                             {
-                                rc.buildRobot(RobotType.SCOUT, nestDirection);
-                                scoutsBuilt++;
+                                if(rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection))
+                                {
+                                    rc.buildRobot(RobotType.LUMBERJACK, nestDirection);
+                                    unitsBuilt++;
+                                }
                             }
-                            else if (rc.canBuildRobot(RobotType.SOLDIER, nestDirection))
+                            else if(unitsBuilt % 6 == 5)
                             {
-                                rc.buildRobot(RobotType.SOLDIER, nestDirection);
+                                if(rc.canBuildRobot(RobotType.SCOUT, nestDirection))
+                                {
+                                    rc.buildRobot(RobotType.SCOUT, nestDirection);
+                                    unitsBuilt++;
+                                }
                             }
+
+
+
                         } else
                         {//no
                             nest(rc.getLocation(), nestDirection);
@@ -235,6 +245,10 @@ public strictfp class RobotPlayer
                 {
                     rc.broadcast(LUMBERJACK_LOCATION_X_CHANNEL, (int)rc.getLocation().x);
                     rc.broadcast(LUMBERJACK_LOCATION_Y_CHANNEL, (int)rc.getLocation().y);
+                }
+                if(rc.getRoundNum() > 2990)
+                {
+                    rc.donate(rc.getTeamBullets());
                 }
                 Clock.yield();
 
@@ -370,6 +384,7 @@ public strictfp class RobotPlayer
         float senseRadius = rc.getType().bodyRadius + rc.getType().sensorRadius;
         MapLocation[] archons = rc.getInitialArchonLocations(rc.getTeam().opponent());
         Direction dir = rc.getLocation().directionTo(archons[0]);
+
         while(true)
         {
             try
@@ -378,6 +393,7 @@ public strictfp class RobotPlayer
                 MapLocation targetLocation = null;
                 RobotInfo[] nearbyEnemies = rc.senseNearbyRobots((float)7, rc.getTeam().opponent());
                 TreeInfo[] nearbyNeutralTrees = rc.senseNearbyTrees(4, Team.NEUTRAL);
+                TreeInfo targetTree = null;
 
                 if(nearbyEnemies.length > 0) //if there are enemies nearby
                 {
@@ -419,14 +435,26 @@ public strictfp class RobotPlayer
                 }
                 else if (nearbyNeutralTrees.length != 0) //otherwise, if there are neutral trees near us
                 {
-                    if(nearbyNeutralTrees[0].getContainedBullets() > 0)
+                    for(int i = 0; i < nearbyNeutralTrees.length; i++)
                     {
-                        if(rc.canShake(nearbyNeutralTrees[0].getID()))
+                        if(nearbyNeutralTrees[i].getContainedRobot() != null)
                         {
-                            rc.shake(nearbyNeutralTrees[0].getID());
+                            targetTree = nearbyNeutralTrees[i];
+                            break;
                         }
                     }
-                    chopTree(nearbyNeutralTrees[0]); //move to and chop the nearest tree
+                    if(targetTree == null)
+                    {
+                        targetTree = nearbyNeutralTrees[0];
+                    }
+                    if(targetTree.getContainedBullets() > 0)
+                    {
+                        if(rc.canShake(targetTree.getID()))
+                        {
+                            rc.shake(targetTree.getID());
+                        }
+                    }
+                    chopTree(targetTree); //move to and chop the nearest tree
                 }
                 else //otherwise, if we have nothing to do
                 {
@@ -659,112 +687,7 @@ public strictfp class RobotPlayer
             }
         }
     }
-    /*
-    //running for scouts
-    static void runScout() throws GameActionException
-    {
-        MapLocation[] archons = rc.getInitialArchonLocations(rc.getTeam().opponent());
-        Direction dir = rc.getLocation().directionTo(archons[0]);
-        float senseRadius = rc.getType().bodyRadius + rc.getType().sensorRadius;
 
-
-        while (true)
-        {
-            try
-            {
-                rc.broadcast(SCOUT_SUM_CHANNEL, rc.readBroadcast(SCOUT_SUM_CHANNEL) + 1); //counting number of scouts
-                TreeInfo neutralTree = getNearbyTree(Team.NEUTRAL);  //get the closest nearby tree
-
-                //first, prioritize enemy gardeners
-                RobotInfo[] enemyGardeners = getNearbyGardeners(senseRadius, rc.getTeam().opponent());
-                if(enemyGardeners.length > 0)
-                {
-                    RobotInfo targetGardener = enemyGardeners[0];
-                    Direction dirToTarget = rc.getLocation().directionTo(targetGardener.getLocation());
-                    if(rc.getLocation().distanceTo(targetGardener.getLocation()) <= 3) //are we close to the gardener?
-                    {//yes
-                        fireBullet(targetGardener.getLocation()); //fire at them
-                    }
-                    else
-                    {
-                        dir = dirToTarget;
-                        tryMove(dirToTarget);
-                    }
-                    //if we can't get a clear shot, move after firing
-                    if(bulletBlockedByTree(dirToTarget, targetGardener))
-                    {
-                        rc.move(rc.getLocation().add(dirToTarget, (float).1));
-                        tryMove(dirToTarget.rotateLeftDegrees(45));
-                    }
-
-                }
-
-                if(rc.getRoundNum() % 200 == 0)
-                {
-                    dir = rc.getLocation().directionTo(archons[0]);
-                }
-
-                if (neutralTree != null && neutralTree.getContainedBullets() != 0)
-                { //if one exists and it has bullets in it
-                    if (rc.canShake(neutralTree.getID()))
-                    { //if we can shake it
-                        rc.shake(neutralTree.getID());
-                    } else
-                    {
-                        moveTo(neutralTree.getLocation()); //else move towards it
-                    }
-                }
-                else
-                { //if there is nearby tree or the closest one has no bullets, move randomly
-                    RobotInfo[] nearbyEnemies = rc.senseNearbyRobots(5, rc.getTeam().opponent());
-                    MapLocation archonLocation = null;
-                    boolean foundArchon = false;
-                    for(int i = 0; i < nearbyEnemies.length; i++)
-                    {
-                        if(nearbyEnemies[i].getType() == RobotType.ARCHON)
-                        {
-                            foundArchon = true;
-                            archonLocation = nearbyEnemies[i].getLocation();
-                            break;
-                        }
-                    }
-                    TreeInfo enemyTree = getNearbyTree(rc.getTeam().opponent());
-                    if(foundArchon && archonLocation != null)
-                    {
-                        rc.broadcast(ATTACK_LOCATION_X_CHANNEL, (int) archonLocation.x); //broadcast the closest x value to the x coord channel
-                        rc.broadcast(ATTACK_LOCATION_Y_CHANNEL, (int) archonLocation.y);
-                    }
-                    else if (enemyTree != null && rc.readBroadcast(ATTACK_LOCATION_X_CHANNEL) == 0)
-                    { //if we sense enemy trees, and there is no priority target
-                        MapLocation priority = getEnemyGardenLoc(rc.getType().bodyRadius + rc.getType().sensorRadius); //try to get a location for attack
-                        if (priority != null)
-                        { //if we found a priority target
-                            System.out.println("Found a target"); //for debugging
-                            rc.broadcast(ATTACK_LOCATION_X_CHANNEL, (int) priority.x); //broadcast the closest x value to the x coord channel
-                            rc.broadcast(ATTACK_LOCATION_Y_CHANNEL, (int) priority.y); //some for y value
-                        } else
-                        {
-                            moveTo(enemyTree.getLocation());
-                        }
-                    }
-                    //this is where i should put the high priority target detection
-                }
-                if(rc.canMove(dir))
-                {
-                    move(dir);
-                }
-                else
-                {
-                    dir = randomDirection();
-                }
-                Clock.yield();
-            } catch (Exception e)
-            {
-                e.printStackTrace();
-            }
-        }
-    }
-    */
 
     static void move(Direction dir) throws GameActionException
     {
