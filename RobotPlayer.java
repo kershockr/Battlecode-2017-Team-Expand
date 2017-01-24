@@ -99,7 +99,10 @@ public strictfp class RobotPlayer
                         rc.donate(10); //getting victory points
                     }
                 }
-
+                if(rc.getRoundNum() > 2900)
+                {
+                    rc.donate(rc.getTeamBullets());
+                }
                 Direction dir = randomDirection();
                 if (rc.canHireGardener(dir) && rc.readBroadcast(GARDENER_COUNT_CHANNEL) < MAX_GARDENERS)
                 { //will hire a gardener if it is possible and there are less than the desired maximum
@@ -144,15 +147,16 @@ public strictfp class RobotPlayer
                 //building an early scout
                 if (rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection))
                 { //to build an early jack, protects us a bit and helps clear shite
+                    System.out.println("Building early jack");
                     rc.buildRobot(RobotType.LUMBERJACK, nestDirection);
                 }
                 else if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) <= 1 && rc.canBuildRobot(RobotType.SCOUT, nestDirection))
                 { //to build an early scout, early tree shaking is very valuable
+                    System.out.println("    ");
                     rc.buildRobot(RobotType.SCOUT, nestDirection);
                 }
 
-                if(rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) > 0)
-                {
+
                     if (rc.getLocation().equals(nestLocation)) //are you in your nest
                     {//yes
                         if (nestComplete) //is your nest complete?
@@ -226,7 +230,7 @@ public strictfp class RobotPlayer
                             }
                         }
                     }
-                }
+
                 if(veryCloseEnemies.length > 0)
                 {
                     rc.broadcast(LUMBERJACK_LOCATION_X_CHANNEL, (int)rc.getLocation().x);
