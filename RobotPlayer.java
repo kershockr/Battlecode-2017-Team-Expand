@@ -18,7 +18,7 @@ public strictfp class RobotPlayer
     static final int SOLDIER_SUM_CHANNEL = 7;
     static final int ATTACK_LOCATION_X_CHANNEL = 8; // holds the x location (rounded to the nearest int) of a high priority target (like enemy tree garden)
     static final int ATTACK_LOCATION_Y_CHANNEL = 9;
-    static final int EXTREME_PERIL_CHANNEL = 10; // holds max trees, so the amount of trees scales to the number of gardeners
+    static final int NESTED_GARDENERS = 10; // holds max trees, so the amount of trees scales to the number of gardeners
     static final int MAX_SOLDIER_CHANNEL = 11;
     static final int LUMBERJACK_LOCATION_X_CHANNEL = 12;
     static final int LUMBERJACK_LOCATION_Y_CHANNEL = 13;
@@ -27,9 +27,8 @@ public strictfp class RobotPlayer
     static final int OBSTRUCTION_CHANNEL = 16;
     static final int PATH_CHANGE_DEGREES_CHANNEL = 17;
 
-    static final int MAX_GARDENERS = 6; //max number of gardeners we want to build
-    static final int MAX_SCOUTS = 3;
-    static final int MAX_LUMBERJACKS = 3;
+    //max number of gardeners we want to build
+
     static Direction buildDirection = Direction.getSouth();
 
     /**
@@ -104,7 +103,7 @@ public strictfp class RobotPlayer
                     rc.donate(rc.getTeamBullets());
                 }
                 Direction dir = randomDirection();
-                if (rc.canHireGardener(dir) && rc.readBroadcast(GARDENER_COUNT_CHANNEL) < MAX_GARDENERS)
+                if (rc.canHireGardener(dir) && rc.readBroadcast(GARDENER_COUNT_CHANNEL) <= rc.readBroadcast(NESTED_GARDENERS))
                 { //will hire a gardener if it is possible and there are less than the desired maximum
                     rc.hireGardener(dir);
 
@@ -129,6 +128,7 @@ public strictfp class RobotPlayer
         MapLocation[] enemyLocation = rc.getInitialArchonLocations(rc.getTeam().opponent());
         Direction nestDirection = rc.getLocation().directionTo(enemyLocation[0]);
         int unitsBuilt = 0;
+        boolean sentToChannel = false;
 
         while(true)
         {
@@ -140,6 +140,11 @@ public strictfp class RobotPlayer
 
                 nestComplete = (nearbyTrees.length >= 5); //will check if we have enough trees in our nest. if we do, nest is complete
 
+                if(nestComplete && !sentToChannel)
+                {
+                    rc.broadcast(NESTED_GARDENERS, rc.readBroadcast(NESTED_GARDENERS) + 1);
+                    sentToChannel = true;
+                }
                 //building an early scout
                 if (rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection))
                 { //to build an early jack, protects us a bit and helps clear shit
@@ -258,6 +263,35 @@ public strictfp class RobotPlayer
             }
         }
     }
+
+    /*
+    static void runSoldier() throws GameActionException
+    {
+        float senseRadius = rc.getType().bodyRadius + rc.getType().sensorRadius;
+        while(true)
+        {
+            try
+            {
+                rc.broadcast(SOLDIER_SUM_CHANNEL, rc.readBroadcast(SOLDIER_SUM_CHANNEL) + 1); //counter for soldiers
+                boolean moved = false;
+                boolean fired = false;
+                BulletInfo[] nearbyBullets = rc.senseNearbyBullets(3); //sense nearby bullets in a radius of 3 units around
+                RobotInfo[] enemyBots = rc.senseNearbyRobots(senseRadius, rc.getTeam().opponent()); //sense all enemy bots nearby and put it into an array
+
+                //block for dodging. executed first because we don't want to waste movements and not be able to dodge
+                if(nearbyBullets.length != 0)
+                {
+
+                }
+
+                Clock.yield();
+            } catch(Exception e)
+            {
+                e.printStackTrace();
+            }
+        }
+    }
+    */
 
     //running for soldiers
     static void runSoldier() throws GameActionException
@@ -378,6 +412,8 @@ public strictfp class RobotPlayer
             }
         }
     }
+
+
     //running for lumberjacks
     static void runLumberjack() throws GameActionException
     {
@@ -1041,6 +1077,14 @@ public strictfp class RobotPlayer
             }
         }
         return null;
+    }
+
+    public static boolean willBulletHitMe(BulletInfo bullet)
+    {
+        float radius = rc.getType().bodyRadius;
+        float distanceBetween = rc.getLocation().distanceTo(bullet.getLocation());
+        float thetaInRadians = 0;
+        return false;
     }
 
 }
