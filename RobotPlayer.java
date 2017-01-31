@@ -122,6 +122,7 @@ public strictfp class RobotPlayer
 
     static void runGardener() throws GameActionException
     {
+        Direction dir = randomDirection();
         MapLocation nestLocation = null;
         Direction movingDirection = null;
         boolean nestComplete = false;
@@ -139,6 +140,11 @@ public strictfp class RobotPlayer
                 RobotInfo[] veryCloseEnemies = rc.senseNearbyRobots((float) 3, rc.getTeam().opponent());
                 TreeInfo[] nearbyTrees = rc.senseNearbyTrees((float) 2.1, rc.getTeam());
 
+                if (rc.readBroadcast(SOLDIER_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.SOLDIER, nestDirection))
+                { //to build an early jack, protects us a bit and helps clear shit
+                    rc.buildRobot(RobotType.SOLDIER, nestDirection);
+                }
+
                 nestComplete = (nearbyTrees.length >= 5); //will check if we have enough trees in our nest. if we do, nest is complete
                 if(rc.getTeamBullets() >= 150 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection) && !nestComplete)
                 {
@@ -150,14 +156,6 @@ public strictfp class RobotPlayer
                     sentToChannel = true;
                 }
                 //building an early scout
-                if (rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection))
-                { //to build an early jack, protects us a bit and helps clear shit
-                    rc.buildRobot(RobotType.LUMBERJACK, nestDirection);
-                } else if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.SCOUT, nestDirection) && scoutsBuilt == 0)
-                { //to build an early scout, early tree shaking is very valuable
-                    rc.buildRobot(RobotType.SCOUT, nestDirection);
-                    scoutsBuilt++;
-                }
 
 
                 if (rc.getLocation().equals(nestLocation)) //are you in your nest
@@ -241,8 +239,18 @@ public strictfp class RobotPlayer
                         //if you still haven't found a nest, move randomly
                         if (nestLocation == null)
                         {
-                            movingDirection = randomDirection();
-                            tryMove(movingDirection);
+                            if(rc.canMove(dir))
+                            {
+                                rc.move(dir);
+                            }
+                            else
+                            {
+                                dir = randomDirection();
+                                if(rc.canMove(dir))
+                                {
+                                    rc.move(dir);
+                                }
+                            }
                         }
                     }
                 }
