@@ -128,6 +128,7 @@ public strictfp class RobotPlayer
         MapLocation[] enemyLocation = rc.getInitialArchonLocations(rc.getTeam().opponent());
         Direction nestDirection = rc.getLocation().directionTo(enemyLocation[0]);
         int unitsBuilt = 0;
+        int scoutsBuilt = 0;
         boolean sentToChannel = false;
 
         while (true)
@@ -139,7 +140,10 @@ public strictfp class RobotPlayer
                 TreeInfo[] nearbyTrees = rc.senseNearbyTrees((float) 2.1, rc.getTeam());
 
                 nestComplete = (nearbyTrees.length >= 5); //will check if we have enough trees in our nest. if we do, nest is complete
-
+                if(rc.getTeamBullets() >= 150 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection) && !nestComplete)
+                {
+                    rc.buildRobot(RobotType.LUMBERJACK, nestDirection);
+                }
                 if (nestComplete && !sentToChannel)
                 {
                     rc.broadcast(NESTED_GARDENERS, rc.readBroadcast(NESTED_GARDENERS) + 1);
@@ -149,9 +153,10 @@ public strictfp class RobotPlayer
                 if (rc.readBroadcast(LUMBERJACK_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.LUMBERJACK, nestDirection))
                 { //to build an early jack, protects us a bit and helps clear shit
                     rc.buildRobot(RobotType.LUMBERJACK, nestDirection);
-                } else if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.SCOUT, nestDirection))
+                } else if (rc.readBroadcast(SCOUT_COUNT_CHANNEL) == 0 && rc.canBuildRobot(RobotType.SCOUT, nestDirection) && scoutsBuilt == 0)
                 { //to build an early scout, early tree shaking is very valuable
                     rc.buildRobot(RobotType.SCOUT, nestDirection);
+                    scoutsBuilt++;
                 }
 
 
@@ -438,7 +443,7 @@ public strictfp class RobotPlayer
                         }
                     }
                     */
-
+                    /*
                     if(enemyBots[0].getLocation().isWithinDistance(rc.getLocation(), 4))
                     {
                         if(!willFriendlyFire(firingDirection))
@@ -451,16 +456,30 @@ public strictfp class RobotPlayer
                             moved = tryMove(firingDirection.rotateLeftDegrees(90));
                         }
                     }
+                    */
                     if(!willFriendlyFire(firingDirection))
                     {
-                        fireBullet(enemyBots[0].getLocation());
-                        fired = true;
+                        tryMove(firingDirection);
+                        if(shouldPentadShot(firingDirection, enemyBots))
+                        {
+                            firePentadBullet(targetLocation);
+                            fired = true;
+                        }
+                        else if(shouldTriadShot(firingDirection, enemyBots) || enemyBots[0].getLocation().isWithinDistance(rc.getLocation(), 4))
+                        {
+                            fireTriadBullet(targetLocation);
+                            fired = true;
+                        }
+                        else
+                        {
+                            fireBullet(enemyBots[0].getLocation());
+                            fired = true;
+                        }
                     }
                     else
                     {
                         moved = tryMove(firingDirection.rotateLeftDegrees(90));
                     }
-
                 }
                 else if (rc.readBroadcast(ATTACK_LOCATION_X_CHANNEL) != 0)//if there is an attack location
                 {
@@ -896,6 +915,17 @@ public strictfp class RobotPlayer
         return null;
     }
 
+    public static Direction firePentadBullet(MapLocation loc) throws GameActionException
+    {
+        if (rc.canFirePentadShot())
+        {
+            Direction dir = rc.getLocation().directionTo(loc);
+            rc.firePentadShot(dir);
+            return dir;
+        }
+        return null;
+    }
+
     public static void fireBullet(Direction dir) throws GameActionException
     {
         if (rc.canFireSingleShot())
@@ -1177,23 +1207,45 @@ public strictfp class RobotPlayer
         return rc.getLocation().distanceTo(target) <= distance;
     }
 
-    public static boolean fire(MapLocation targetLocation) throws GameActionException
-    {
-        Direction targetDirection = rc.getLocation().directionTo(targetLocation);
+   public static boolean shouldPentadShot(Direction targetDirection, RobotInfo[] nearbyEnemies)
+   {
+        int enemiesWithinPentad = 0;
+        for(int i = 0; i < nearbyEnemies.length; i++)
+        {
+            Direction enemyDirection = rc.getLocation().directionTo(nearbyEnemies[i].getLocation());
+            if(targetDirection.degreesBetween(enemyDirection) <= 30) //if the enemy direction is within 30 degrees of the target
+            {
+                enemiesWithinPentad++;
+            }
 
-        if (closeEnoughTo(targetLocation, 3) && rc.canFirePentadShot()) //if we are super close, fire pentad
+        }
+       if (enemiesWithinPentad > 1)
+       {
+           return true;
+       }
+       else
+       {
+           return false;
+       }
+   }
+
+    public static boolean shouldTriadShot(Direction targetDirection, RobotInfo[] nearbyEnemies)
+    {
+        int enemiesWithinTriad = 0;
+        for(int i = 0; i < nearbyEnemies.length; i++)
         {
-            rc.firePentadShot(targetDirection);
-            return true;
-        } else if (closeEnoughTo(targetLocation, 4) && rc.canFireTriadShot()) //if we are pretty close, fire triad
+            Direction enemyDirection = rc.getLocation().directionTo(nearbyEnemies[i].getLocation());
+            if(targetDirection.degreesBetween(enemyDirection) <= 20) //if the enemy direction is within 20 degrees of the target
+            {
+                enemiesWithinTriad++;
+            }
+
+        }
+        if (enemiesWithinTriad > 1)
         {
-            rc.fireTriadShot(targetDirection);
             return true;
-        } else if (rc.canFireSingleShot()) //if we aren't so close, fire normally
-        {
-            rc.fireSingleShot(targetDirection);
-            return true;
-        } else //if we couldn't fire a single bullet, return false
+        }
+        else
         {
             return false;
         }
